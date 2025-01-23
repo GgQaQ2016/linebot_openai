@@ -18,21 +18,48 @@ import traceback
 
 app = Flask(__name__)
 static_tmp_path = os.path.join(os.path.dirname(__file__), 'static', 'tmp')
+
 # Channel Access Token
 line_bot_api = LineBotApi(os.getenv('CHANNEL_ACCESS_TOKEN'))
 # Channel Secret
 handler = WebhookHandler(os.getenv('CHANNEL_SECRET'))
-# OPENAI API Key初始化設定
-openai.api_key = os.getenv('OPENAI_API_KEY')
 
+# 初始化 OpenAI 客戶端
+client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+
+# 助理 ID
+ASSISTANT_ID = "asst_w2rzWsGFa9tIbQtS93H2ZUgi"
 
 def GPT_response(text):
-    # 接收回應
-    response = openai.Completion.create(model="gpt-3.5-turbo-instruct", prompt=text, temperature=0.5, max_tokens=500)
-    print(response)
-    # 重組回應
-    answer = response['choices'][0]['text'].replace('。','')
-    return answer
+    try:
+        # 檢查是否有對話串 ID
+        thread = client.beta.threads.create()
+        thread_id = thread.id
+
+        # 新增用戶訊息到對話串
+        client.beta.threads.messages.create(
+            thread_id=thread_id,
+            role="user",
+            content=text
+        )
+
+        # 建立 Run 來獲取助理回應
+        run = client.beta.threads.runs.create(thread_id=thread_id, assistant_id=ASSISTANT_ID)
+
+        # 輪詢直到完成
+        while True:
+            run_status = client.beta.threads.runs.retrieve(thread_id=thread_id, run_id=run.id)
+            if run_status.status == "completed":
+                break
+
+        # 取得回應
+        messages = client.beta.threads.messages.list(thread_id=thread_id)
+        response = messages.data[-1].content  # 獲取最後一條訊息
+
+        return response.strip()
+    except Exception as e:
+        print(traceback.format_exc())
+        return "目前無法處理您的請求，請稍後再試。"
 
 
 # 監聽所有來自 /callback 的 Post Request
@@ -62,10 +89,10 @@ def handle_message(event):
     except:
         print(traceback.format_exc())
         line_bot_api.reply_message(event.reply_token, TextSendMessage('你所使用的OPENAI API key額度可能已經超過，請於後台Log內確認錯誤訊息'))
-        
+
 
 @handler.add(PostbackEvent)
-def handle_message(event):
+def handle_postback(event):
     print(event.postback.data)
 
 
@@ -77,8 +104,8 @@ def welcome(event):
     name = profile.display_name
     message = TextSendMessage(text=f'{name}歡迎加入')
     line_bot_api.reply_message(event.reply_token, message)
-        
-        
+
+
 import os
 if __name__ == "__main__":
     port = int(os.environ.get('PORT', 5000))
