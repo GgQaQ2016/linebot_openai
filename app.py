@@ -2,10 +2,10 @@ from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import *
-import openai 
-from dotenv import load_dotenv
+import openai
 import os
 import traceback
+from dotenv import load_dotenv
 
 # 載入環境變數
 load_dotenv()
@@ -18,45 +18,22 @@ static_tmp_path = os.path.join(os.path.dirname(__file__), 'static', 'tmp')
 line_bot_api = LineBotApi(os.getenv('CHANNEL_ACCESS_TOKEN'))
 handler = WebhookHandler(os.getenv('CHANNEL_SECRET'))
 
-# OpenAI API 初始化
-openai.api_key = os.getenv('OPENAI_API_KEY')
-client = openai(api_key=openai.api_key)
-ASSISTANT_ID = "asst_w2rzWsGFa9tIbQtS93H2ZUgi"
+# OpenAI API 設定
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# OpenAI 助理初始化對話串
-sessions = {}
-
-def init_openai_thread(user_id):
-    """初始化 OpenAI 助理對話串"""
-    if user_id not in sessions:
-        thread = client.beta.threads.create()
-        sessions[user_id] = thread.id
-    return sessions[user_id]
-
-def get_openai_response(user_id, message):
-    """向 OpenAI 助理發送訊息並獲取回應"""
-    thread_id = init_openai_thread(user_id)
-
-    # 新增用戶訊息到對話串
-    client.beta.threads.messages.create(
-        thread_id=thread_id,
-        role="user",
-        content=message
-    )
-
-    # 建立 Run 來獲取助理回應
-    run = client.beta.threads.runs.create(thread_id=thread_id, assistant_id=ASSISTANT_ID)
-
-    # 輪詢直到完成
-    while True:
-        run_status = client.beta.threads.runs.retrieve(thread_id=thread_id, run_id=run.id)
-        if run_status.status == "completed":
-            break
-
-    # 取得回應並格式化
-    messages = client.beta.threads.messages.list(thread_id=thread_id)
-    response = messages.data[-1].content
-    return response
+def GPT_response(user_message):
+    """使用 OpenAI GPT 模型生成回應"""
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": user_message}],
+            temperature=0.5,
+            max_tokens=500
+        )
+        return response["choices"][0]["message"]["content"]
+    except Exception as e:
+        print(f"OpenAI API Error: {e}")
+        return "抱歉，我無法處理您的請求，請稍後再試。"
 
 # 監聽所有來自 /callback 的 POST Request
 @app.route("/callback", methods=['POST'])
@@ -75,17 +52,14 @@ def callback():
 # 處理用戶訊息
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
-    user_id = event.source.user_id
     user_message = event.message.text
-
     try:
-        # 使用 OpenAI 助理回應
-        assistant_response = get_openai_response(user_id, user_message)
+        # 使用 OpenAI GPT 回應
+        assistant_response = GPT_response(user_message)
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=assistant_response))
     except Exception as e:
-        print(traceback.format_exc())
-        error_message = "發生錯誤，請稍後再試！"
-        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=error_message))
+        print(f"Error: {e}")
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text="發生錯誤，請稍後再試。"))
 
 # 處理 Postback
 @handler.add(PostbackEvent)
