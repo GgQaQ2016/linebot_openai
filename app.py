@@ -28,7 +28,7 @@ def GPT_response_with_assistant(user_message):
     """使用 OpenAI 助理生成回應"""
     try:
         response = openai.ChatCompletion.create(
-            model="gpt-4o",
+            model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": "You are a helpful assistant."},
                 {"role": "user", "content": user_message}
