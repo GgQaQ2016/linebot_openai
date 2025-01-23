@@ -24,27 +24,39 @@ line_bot_api = LineBotApi(os.getenv('CHANNEL_ACCESS_TOKEN'))
 # Channel Secret
 handler = WebhookHandler(os.getenv('CHANNEL_SECRET'))
 
-# OpenAI 客戶端初始化設定
-openai.api_key = os.getenv('OPENAI_API_KEY')
+# 初始化 OpenAI 客戶端
+client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 
-# 助理 ID（如果需要區分多個助理，請根據需求替換）
+# 助理 ID
 ASSISTANT_ID = "asst_w2rzWsGFa9tIbQtS93H2ZUgi"
 
 def GPT_response(text):
     try:
-        # 使用 ChatCompletion 與指定助理互動
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "You are a helpful assistant."},
-                {"role": "user", "content": text}
-            ],
-            temperature=0.5,
-            max_tokens=500
+        # 檢查是否有對話串 ID
+        thread = client.beta.threads.create()
+        thread_id = thread.id
+
+        # 新增用戶訊息到對話串
+        client.beta.threads.messages.create(
+            thread_id=thread_id,
+            role="user",
+            content=text
         )
-        # 重組回應內容
-        answer = response['choices'][0]['message']['content'].strip()
-        return answer
+
+        # 建立 Run 來獲取助理回應
+        run = client.beta.threads.runs.create(thread_id=thread_id, assistant_id=ASSISTANT_ID)
+
+        # 輪詢直到完成
+        while True:
+            run_status = client.beta.threads.runs.retrieve(thread_id=thread_id, run_id=run.id)
+            if run_status.status == "completed":
+                break
+
+        # 取得回應
+        messages = client.beta.threads.messages.list(thread_id=thread_id)
+        response = messages.data[-1].content  # 獲取最後一條訊息
+
+        return response.strip()
     except Exception as e:
         print(traceback.format_exc())
         return "目前無法處理您的請求，請稍後再試。"
@@ -71,13 +83,12 @@ def callback():
 def handle_message(event):
     msg = event.message.text
     try:
-        # 呼叫 OpenAI 助理處理訊息
         GPT_answer = GPT_response(msg)
         print(GPT_answer)
         line_bot_api.reply_message(event.reply_token, TextSendMessage(GPT_answer))
     except:
         print(traceback.format_exc())
-        line_bot_api.reply_message(event.reply_token, TextSendMessage('你所使用的 OPENAI API key 額度可能已經超過，請於後台 Log 內確認錯誤訊息'))
+        line_bot_api.reply_message(event.reply_token, TextSendMessage('你所使用的OPENAI API key額度可能已經超過，請於後台Log內確認錯誤訊息'))
 
 
 @handler.add(PostbackEvent)
@@ -91,7 +102,7 @@ def welcome(event):
     gid = event.source.group_id
     profile = line_bot_api.get_group_member_profile(gid, uid)
     name = profile.display_name
-    message = TextSendMessage(text=f'{name} 歡迎加入')
+    message = TextSendMessage(text=f'{name}歡迎加入')
     line_bot_api.reply_message(event.reply_token, message)
 
 
