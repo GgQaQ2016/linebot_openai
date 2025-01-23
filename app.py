@@ -3,12 +3,11 @@ from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import *
 import openai 
-from dotenv import load_dotenv
+
 import os
 import traceback
 
-# 載入環境變數
-load_dotenv()
+
 
 # 初始化 Flask 應用程式
 app = Flask(__name__)
