@@ -1,10 +1,9 @@
-from flask import Flask, request, abort, jsonify, session
+from flask import Flask, request, abort, session
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import *
 import openai
 import os
-import traceback
 from dotenv import load_dotenv
 
 # 載入環境變數
@@ -13,7 +12,6 @@ load_dotenv()
 # 初始化 Flask 應用程式
 app = Flask(__name__)
 app.secret_key = os.urandom(24)  # 用於 session 管理
-static_tmp_path = os.path.join(os.path.dirname(__file__), 'static', 'tmp')
 
 # LINE Bot 設定
 line_bot_api = LineBotApi(os.getenv('CHANNEL_ACCESS_TOKEN'))
@@ -25,32 +23,24 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 # 助理 ID（請替換為您創建的助理 ID）
 ASSISTANT_ID = "asst_w2rzWsGFa9tIbQtS93H2ZUgi"
 
-def GPT_response(text):
-    # 接收回應
-    response = openai.ChatCompletion.create(model="gpt-4o-mini", prompt=text, temperature=0.5, max_tokens=16000)
+def GPT_response(user_message):
+    """使用 OpenAI ChatCompletion API 生成回應"""
     try:
-        initialize_thread()
-        thread_id = session["thread_id"]
-
-        # 將用戶訊息加入對話串
         response = openai.ChatCompletion.create(
             model="gpt-4o-mini",
             messages=[
+                {"role": "system", "content": "You are a helpful assistant."},
                 {"role": "user", "content": user_message}
             ],
             temperature=0.5,
-            max_tokens=500,
-            thread_id=thread_id
+            max_tokens=500
         )
-
-    print(response)
-    # 重組回應
-    answer = response['choices'][0]['text'].replace('。','')
-    return answer
-
-
-
-
+        # 提取生成的回應
+        answer = response["choices"][0]["message"]["content"].strip()
+        return answer
+    except Exception as e:
+        print(f"OpenAI API Error: {e}")
+        return "抱歉，我無法處理您的請求，請稍後再試。"
 
 # 監聽所有來自 /callback 的 POST Request
 @app.route("/callback", methods=['POST'])
@@ -71,12 +61,11 @@ def callback():
 def handle_message(event):
     user_message = event.message.text
     try:
-        # 使用 OpenAI 助理回應，並保留上下文
+        # 使用 OpenAI 助理生成回應
         GPT_answer = GPT_response(user_message)
-        echo = {"type": "text", "text": assistant_response or "抱歉，我沒有話可說了。"}
 
         # 回傳訊息給使用者
-        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=echo["text"]))
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=GPT_answer))
     except Exception as e:
         print(f"Error: {e}")
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text="發生錯誤，請稍後再試。"))
