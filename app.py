@@ -28,7 +28,7 @@ def GPT_response_with_assistant(user_message):
     """使用 OpenAI 助理生成回應"""
     try:
         response = openai.ChatCompletion.create(
-            model="gpt-4o-mini",
+            model="gpt-4o",
             messages=[
                 {"role": "system", "content": "You are a helpful assistant."},
                 {"role": "user", "content": user_message}
@@ -42,18 +42,59 @@ def GPT_response_with_assistant(user_message):
         return "抱歉，我無法處理您的請求，請稍後再試。"
 
 # 監聽所有來自 /callback 的 POST Request
-@app.route("/callback", methods=['POST'])
-def callback():
-    signature = request.headers['X-Line-Signature']
-    body = request.get_data(as_text=True)
-    app.logger.info("Request body: " + body)
+#@app.route("/callback", methods=['POST'])
+#def callback():
+#    signature = request.headers['X-Line-Signature']
+#    body = request.get_data(as_text=True)
+#    app.logger.info("Request body: " + body)
+#
+#    try:
+#        handler.handle(body, signature)
+#    except InvalidSignatureError:
+#        abort(400)
+#
+#    return 'OK'
+@app.route("/init", methods=["GET"])
+def init():
+    """初始化對話串，返回對話串 ID"""
+    thread = client.beta.threads.create()
+    session["thread_id"] = thread.id
+    return jsonify({"thread_id": thread.id})
 
-    try:
-        handler.handle(body, signature)
-    except InvalidSignatureError:
-        abort(400)
+@app.route("/callback", methods=["POST"])
+def chat():
+    """處理用戶訊息並返回助理回應"""
+    user_message = request.json.get("message")
+    thread_id = session.get("thread_id")
 
-    return 'OK'
+    if not user_message:
+        return jsonify({"error": "請提供訊息"}), 400
+
+    if not thread_id:
+        return jsonify({"error": "對話未初始化"}), 400
+
+    # 新增用戶訊息到對話串
+    client.beta.threads.messages.create(
+        thread_id=thread_id,
+        role="user",
+        content=user_message
+    )
+
+    # 建立 Run 來獲取助理回應
+    run = client.beta.threads.runs.create(thread_id=thread_id, assistant_id=ASSISTANT_ID)
+
+    # 輪詢直到完成
+    while True:
+        run_status = client.beta.threads.runs.retrieve(thread_id=thread_id, run_id=run.id)
+        if run_status.status == "completed":
+            break
+
+    # 取得回應並格式化分行
+    messages = client.beta.threads.messages.list(thread_id=thread_id)
+    response = messages.data[0].content[0].text.value
+    formatted_response = response.replace("\n", "<br>")
+
+    return jsonify({"response": formatted_response})
 
 # 處理用戶訊息
 @handler.add(MessageEvent, message=TextMessage)
