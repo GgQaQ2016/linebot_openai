@@ -18,21 +18,36 @@ import traceback
 
 app = Flask(__name__)
 static_tmp_path = os.path.join(os.path.dirname(__file__), 'static', 'tmp')
+
 # Channel Access Token
 line_bot_api = LineBotApi(os.getenv('CHANNEL_ACCESS_TOKEN'))
 # Channel Secret
 handler = WebhookHandler(os.getenv('CHANNEL_SECRET'))
-# OPENAI API Key初始化設定
+
+# OpenAI 客戶端初始化設定
 openai.api_key = os.getenv('OPENAI_API_KEY')
 
+# 助理 ID（如果需要區分多個助理，請根據需求替換）
+ASSISTANT_ID = "asst_w2rzWsGFa9tIbQtS93H2ZUgi"
 
 def GPT_response(text):
-    # 接收回應
-    response = openai.Completion.create(model="gpt-3.5-turbo-instruct", prompt=text, temperature=0.5, max_tokens=500)
-    print(response)
-    # 重組回應
-    answer = response['choices'][0]['text'].replace('。','')
-    return answer
+    try:
+        # 使用 ChatCompletion 與指定助理互動
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": text}
+            ],
+            temperature=0.5,
+            max_tokens=500
+        )
+        # 重組回應內容
+        answer = response['choices'][0]['message']['content'].strip()
+        return answer
+    except Exception as e:
+        print(traceback.format_exc())
+        return "目前無法處理您的請求，請稍後再試。"
 
 
 # 監聽所有來自 /callback 的 Post Request
@@ -56,16 +71,17 @@ def callback():
 def handle_message(event):
     msg = event.message.text
     try:
+        # 呼叫 OpenAI 助理處理訊息
         GPT_answer = GPT_response(msg)
         print(GPT_answer)
         line_bot_api.reply_message(event.reply_token, TextSendMessage(GPT_answer))
     except:
         print(traceback.format_exc())
-        line_bot_api.reply_message(event.reply_token, TextSendMessage('你所使用的OPENAI API key額度可能已經超過，請於後台Log內確認錯誤訊息'))
-        
+        line_bot_api.reply_message(event.reply_token, TextSendMessage('你所使用的 OPENAI API key 額度可能已經超過，請於後台 Log 內確認錯誤訊息'))
+
 
 @handler.add(PostbackEvent)
-def handle_message(event):
+def handle_postback(event):
     print(event.postback.data)
 
 
@@ -75,10 +91,10 @@ def welcome(event):
     gid = event.source.group_id
     profile = line_bot_api.get_group_member_profile(gid, uid)
     name = profile.display_name
-    message = TextSendMessage(text=f'{name}歡迎加入')
+    message = TextSendMessage(text=f'{name} 歡迎加入')
     line_bot_api.reply_message(event.reply_token, message)
-        
-        
+
+
 import os
 if __name__ == "__main__":
     port = int(os.environ.get('PORT', 5000))
