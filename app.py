@@ -45,7 +45,7 @@ def GPT_response_with_context(user_message):
 
         # 將用戶訊息加入對話串
         response = openai.ChatCompletion.create(
-            model="gpt-4o",
+            model="gpt-4o-mini",
             messages=[
                 {"role": "user", "content": user_message}
             ],
