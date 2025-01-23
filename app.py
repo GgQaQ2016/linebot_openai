@@ -21,16 +21,22 @@ handler = WebhookHandler(os.getenv('CHANNEL_SECRET'))
 # OpenAI API 設定
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-def GPT_response(user_message):
-    """使用 OpenAI GPT 模型生成回應"""
+# 助理 ID（請替換為您創建的助理 ID）
+ASSISTANT_ID = "asst_w2rzWsGFa9tIbQtS93H2ZUgi"
+
+def GPT_response_with_assistant(user_message):
+    """使用 OpenAI 助理生成回應"""
     try:
         response = openai.ChatCompletion.create(
             model="gpt-4o-mini",
-            messages=[{"role": "user", "content": user_message}],
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": user_message}
+            ],
             temperature=0.5,
             max_tokens=500
         )
-        return response["choices"][0]["message"]["content"]
+        return response["choices"][0]["message"]["content"].strip()
     except Exception as e:
         print(f"OpenAI API Error: {e}")
         return "抱歉，我無法處理您的請求，請稍後再試。"
@@ -54,8 +60,8 @@ def callback():
 def handle_message(event):
     user_message = event.message.text
     try:
-        # 使用 OpenAI GPT 回應
-        assistant_response = GPT_response(user_message)
+        # 使用 OpenAI 助理回應
+        assistant_response = GPT_response_with_assistant(user_message)
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=assistant_response))
     except Exception as e:
         print(f"Error: {e}")
