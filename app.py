@@ -2,12 +2,13 @@ from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import *
-import openai 
-
+from openai import OpenAI
+from dotenv import load_dotenv
 import os
 import traceback
 
-
+# 載入環境變數
+load_dotenv()
 
 # 初始化 Flask 應用程式
 app = Flask(__name__)
@@ -19,7 +20,7 @@ handler = WebhookHandler(os.getenv('CHANNEL_SECRET'))
 
 # OpenAI API 初始化
 openai.api_key = os.getenv('OPENAI_API_KEY')
-client = openai (api_key=openai.api_key)
+client = OpenAI(api_key=openai.api_key)
 ASSISTANT_ID = "asst_w2rzWsGFa9tIbQtS93H2ZUgi"
 
 # OpenAI 助理初始化對話串
