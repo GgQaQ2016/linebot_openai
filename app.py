@@ -25,20 +25,9 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 # 助理 ID（請替換為您創建的助理 ID）
 ASSISTANT_ID = "asst_w2rzWsGFa9tIbQtS93H2ZUgi"
 
-def initialize_thread():
-    """初始化對話串並存儲於 session"""
-    if "thread_id" not in session:
-        response = openai.ChatCompletion.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": "You are a helpful assistant."}
-            ]
-        )
-        session["thread_id"] = response["id"]
-
-
-def GPT_response_with_context(user_message):
-    """使用 OpenAI 助理生成回應，並保留上下文"""
+def GPT_response(text):
+    # 接收回應
+    response = openai.ChatCompletion.create(model="gpt-4o-mini", prompt=text, temperature=0.5, max_tokens=16000)
     try:
         initialize_thread()
         thread_id = session["thread_id"]
@@ -54,10 +43,14 @@ def GPT_response_with_context(user_message):
             thread_id=thread_id
         )
 
-        return response["choices"][0]["message"]["content"].strip()
-    except Exception as e:
-        print(f"OpenAI API Error: {e}")
-        return "抱歉，我無法處理您的請求，請稍後再試。"
+    print(response)
+    # 重組回應
+    answer = response['choices'][0]['text'].replace('。','')
+    return answer
+
+
+
+
 
 # 監聽所有來自 /callback 的 POST Request
 @app.route("/callback", methods=['POST'])
@@ -79,7 +72,7 @@ def handle_message(event):
     user_message = event.message.text
     try:
         # 使用 OpenAI 助理回應，並保留上下文
-        assistant_response = GPT_response_with_context(user_message)
+        GPT_answer = GPT_response(user_message)
         echo = {"type": "text", "text": assistant_response or "抱歉，我沒有話可說了。"}
 
         # 回傳訊息給使用者
